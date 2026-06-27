@@ -37,6 +37,7 @@ AsyncAuthenticationMiddleware web_auth_middleware;
 // Measure OTA progress
 unsigned long ota_progress_millis = 0;
 
+#include "../../communication/can/can_inject.h"
 #include "advanced_battery_html.h"
 #include "can_logging_html.h"
 #include "can_replay_html.h"
@@ -764,6 +765,17 @@ void init_webserver() {
 
   // Route for editing balancing enabled
   update_int_setting("/TeslaBalAct", [](int value) { datalayer.battery.settings.user_requests_balancing = value; });
+
+  // Route for the homescreen "Inject 0x054" charge-enable experiment (generic injector).
+  // 1 = start cyclic 0x054 (Ingenext-style charge-enable, 10 Hz); 0 = stop.
+  update_int_setting("/inject054", [](int value) {
+    if (value) {
+      static const uint8_t d[8] = {0x01, 0x00, 0x02, 0xE8, 0x03, 0x30, 0x87, 0x00};
+      can_inject_set(0x054, d, 8, false, 100, -1);
+    } else {
+      can_inject_clear(0x054);
+    }
+  });
 
   // Route for editing balancing max time
   update_string_setting("/BalTime", [](String value) {
@@ -1601,6 +1613,22 @@ String processor(const String& var) {
     content += "<button onclick='Advanced()'>More Battery Info</button> ";
     content += "<button onclick='CANlog()'>CAN logger</button> ";
     content += "<button onclick='CANreplay()'>CAN replay</button> ";
+
+    // Experimental: inject the 0x054 charge-enable frame (see balancing/FINDINGS.md).
+    content +=
+        "<button onclick=\"if(confirm('Inject the 0x054 charge-enable frame cyclically? Supervise "
+        "the experiment and keep the inverter charge controlled.')){var "
+        "x=new XMLHttpRequest();x.open('GET','/inject054?value=1');x.send();}\">Inject 0x054 ON</button> ";
+    content +=
+        "<button onclick=\"var x=new XMLHttpRequest();x.open('GET','/inject054?value=0');x.send();\">"
+        "Inject 0x054 OFF</button> ";
+    {
+      uint8_t inj = can_inject_active_count();
+      if (inj > 0) {
+        content += "<h4 style='color:#f59e0b'>&#9888; CAN injection ACTIVE (" + String(inj) +
+                   " frame" + (inj > 1 ? "s" : "") + ")</h4>";
+      }
+    }
     if (datalayer.system.info.web_logging_active || datalayer.system.info.SD_logging_active) {
       content += "<button onclick='Log()'>Log</button> ";
     }

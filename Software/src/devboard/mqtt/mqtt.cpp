@@ -5,6 +5,7 @@
 #include <src/communication/nvm/comm_nvm.h>
 #include <list>
 #include "../../battery/BATTERIES.h"
+#include "../../communication/can/can_inject.h"
 #include "../../communication/contactorcontrol/comm_contactorcontrol.h"
 #include "../../datalayer/datalayer.h"
 #include "../../datalayer/datalayer_extended.h"
@@ -239,6 +240,16 @@ void set_battery_voltage_attributes(JsonDocument& doc, int i, int cellNumber, co
 
 static String generateButtonTopic(const char* subtype) {
   return topic_name + "/command/" + String(subtype);
+}
+
+static uint8_t hexnib(char c) {
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  return 0;
 }
 
 static const char* get_balancing_status_text(balancing_status_enum status) {
@@ -638,6 +649,33 @@ void mqtt_message_received(char* topic_raw, int topic_len, char* data, int data_
 
   if (strcmp(topic, generateButtonTopic("STOP").c_str()) == 0) {
     setBatteryPause(true, false, true);
+  }
+
+  // Generic CAN injection. Payloads:
+  //   {"id":84,"data":"0100024803308700","interval_ms":100,"count":-1}  start/replace
+  //   {"stop":84}        stop one id
+  //   {"stop_all":true}  stop everything
+  if (strcmp(topic, generateButtonTopic("CAN_INJECT").c_str()) == 0) {
+    JsonDocument doc;
+    char* data_str = strndup(data, data_len);
+    deserializeJson(doc, data_str);
+    free(data_str);
+    if (doc["stop_all"].is<bool>() && doc["stop_all"].as<bool>()) {
+      can_inject_clear_all();
+    } else if (doc["stop"].is<int>()) {
+      can_inject_clear((uint32_t)doc["stop"].as<long>());
+    } else if (doc["id"].is<int>()) {
+      const char* hex = doc["data"] | "";
+      uint8_t bytes[8] = {0};
+      uint8_t dlc = 0;
+      for (uint8_t i = 0; hex[i] && hex[i + 1] && dlc < 8; i += 2) {
+        bytes[dlc++] = (hexnib(hex[i]) << 4) | hexnib(hex[i + 1]);
+      }
+      uint32_t interval = doc["interval_ms"] | 100;
+      int32_t count = doc["count"] | -1;
+      bool ext = doc["ext"] | false;
+      can_inject_set((uint32_t)doc["id"].as<long>(), bytes, dlc, ext, interval, count);
+    }
   }
 
   if (strcmp(topic, generateButtonTopic("SET_LIMITS").c_str()) == 0) {

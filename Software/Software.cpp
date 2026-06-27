@@ -9,6 +9,7 @@
 #include "src/battery/BATTERIES.h"
 #include "src/charger/CHARGERS.h"
 #include "src/communication/Transmitter.h"
+#include "src/communication/can/can_inject.h"
 #include "src/communication/can/comm_can.h"
 #include "src/communication/contactorcontrol/comm_contactorcontrol.h"
 #include "src/communication/equipmentstopbutton/comm_equipmentstopbutton.h"
@@ -524,6 +525,9 @@ void core_loop(void*) {
         transmitter->transmit(currentMillis);
       }
     }
+
+    // Run any user-requested CAN injections (MQTT / homescreen). Cheap: only checks timers.
+    can_inject_run(currentMillis);
 
     if (datalayer.system.info.performance_measurement_active) {
       END_TIME_MEASUREMENT_MAX(all, datalayer.system.status.core_task_10s_max_us);
