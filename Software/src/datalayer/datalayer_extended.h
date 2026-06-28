@@ -530,6 +530,14 @@ struct DATALAYER_INFO_RIVIAN {
 };
 
 struct DATALAYER_INFO_TESLA {
+  // Experimental cell-balancing aid (see balancing/FINDINGS.md §9). When true, BE presents a
+  // coherent "parked + plugged in" context to the retained Tesla master instead of "driving":
+  // it sends the charge-port frames 0x21D/0x25D and swaps 0x118/0x221 to their captured charging
+  // values, while leaving the contactors closed so the inverter can DC-charge the pack. Goal: make
+  // the master walk into BMS_CHARGING and run its native top-of-charge balancing. Resets off on
+  // boot; toggled from the homescreen button / MQTT. Signalling only — moves no power itself.
+  bool charge_emulation_active = false;
+
   uint64_t BMS_info_bootGitHash = 0;
   uint64_t PCS_info_bootGitHash = 0;
   uint64_t HVP_info_bootGitHash = 0;

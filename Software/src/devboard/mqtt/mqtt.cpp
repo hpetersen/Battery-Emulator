@@ -678,6 +678,28 @@ void mqtt_message_received(char* topic_raw, int topic_len, char* data, int data_
     }
   }
 
+  // Tesla charge-port "charging" handshake preset (see balancing/FINDINGS.md §9).
+  //   {"on":true}  start the 4-frame CP handshake (0x21D/0x25D/0x22A/0x264) at 10 Hz
+  //   {"on":false} stop it
+  if (strcmp(topic, generateButtonTopic("CHARGE_HANDSHAKE").c_str()) == 0) {
+    JsonDocument doc;
+    char* data_str = strndup(data, data_len);
+    deserializeJson(doc, data_str);
+    free(data_str);
+    can_inject_charge_handshake(doc["on"] | false);
+  }
+
+  // Tesla charge-context emulation mode (see balancing/FINDINGS.md §9).
+  //   {"on":true}  BE presents parked+plugged-in context (0x21D/0x25D + charging 0x118/0x221)
+  //   {"on":false} back to normal drive context
+  if (strcmp(topic, generateButtonTopic("CHARGE_EMU").c_str()) == 0) {
+    JsonDocument doc;
+    char* data_str = strndup(data, data_len);
+    deserializeJson(doc, data_str);
+    free(data_str);
+    datalayer_extended.tesla.charge_emulation_active = doc["on"] | false;
+  }
+
   if (strcmp(topic, generateButtonTopic("SET_LIMITS").c_str()) == 0) {
     JsonDocument doc;
     char* data_str = strndup(data, data_len);

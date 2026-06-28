@@ -1855,6 +1855,9 @@ static constexpr CAN_frame can_msg_118[] = {
     {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x70, 0x8F, 0x30, 0x10, 0x00, 0x08, 0x00, 0x80}}};
 
 void TeslaBattery::transmit_can(unsigned long currentMillis) {
+  // Experimental charge-context emulation (see balancing/FINDINGS.md §9). Read once per pass.
+  const bool charge_emulation_active = datalayer_extended.tesla.charge_emulation_active;
+
   // Ensure we only send one message branch at a time, to reduce worst-case
   // runtime.
   // transmitPhase is an instance member variable (TESLA-BATTERY.h)
@@ -1875,10 +1878,17 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
         index_118 = (index_118 + 1) % 16;
       }
     } else {  //Normal handling of 118 message (Non digital HVIL version)
-      //0x118 DI_systemStatus
-      transmit_can_frame(&TESLA_118);
+      //0x118 DI_systemStatus — swap to the parked/charging variant in charge-emulation mode
+      transmit_can_frame(charge_emulation_active ? &TESLA_118_CHARGE : &TESLA_118);
       index_1CF = 0;  //Stop broadcasting Digital HVIL 1CF and 118 to keep contactors open
       index_118 = 0;
+    }
+
+    // Charge-emulation: emit the charge-port-controller frames so the master sees a plug present.
+    // (BE has no charge-port hardware; these are the missing chain — see balancing/FINDINGS.md §9.)
+    if (charge_emulation_active) {
+      transmit_can_frame(&TESLA_21D);
+      transmit_can_frame(&TESLA_25D);
     }
 
     //0x2E1 VCFRONT_status
@@ -1905,8 +1915,8 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
         break;
     }
     muxNumber_TESLA_2E1 = (muxNumber_TESLA_2E1 + 1) % 6;  //Cycle betweeen 0-1-2-3-4-5-0...
-    //Generate next frames
-    generateFrameCounterChecksum(TESLA_118, 8, 4, 0, 8);
+    //Generate next frames (on whichever 0x118 variant we just sent)
+    generateFrameCounterChecksum(charge_emulation_active ? TESLA_118_CHARGE : TESLA_118, 8, 4, 0, 8);
   }
 
   //Send 50ms messages
@@ -1914,7 +1924,17 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
     previousMillis50 = currentMillis;
 
     //0x221 VCFRONT_LVPowerState
-    if (vehicleState == CAR_DRIVE) {
+    if (charge_emulation_active) {
+      // Present the "parked + charging" LV power state instead of "drive" so the master accepts
+      // the plug (contactors stay closed for the inverter's DC charge). See FINDINGS.md §9.
+      if (alternateMux) {
+        generateMuxFrameCounterChecksum(TESLA_221_CHARGE_Mux0, frameCounter_TESLA_221, 52, 4, 56, 8);
+        transmit_can_frame(&TESLA_221_CHARGE_Mux0);
+      } else {
+        generateMuxFrameCounterChecksum(TESLA_221_CHARGE_Mux1, frameCounter_TESLA_221, 52, 4, 56, 8);
+        transmit_can_frame(&TESLA_221_CHARGE_Mux1);
+      }
+    } else if (vehicleState == CAR_DRIVE) {
       if (alternateMux) {
         generateMuxFrameCounterChecksum(TESLA_221_DRIVE_Mux0, frameCounter_TESLA_221, 52, 4, 56, 8);
         transmit_can_frame(&TESLA_221_DRIVE_Mux0);

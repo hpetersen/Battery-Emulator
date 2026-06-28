@@ -777,6 +777,16 @@ void init_webserver() {
     }
   });
 
+  // Route for the homescreen "Charge handshake" preset (see balancing/FINDINGS.md §9).
+  // 1 = start the 4-frame CP charge-port handshake (0x21D/0x25D/0x22A/0x264, 10 Hz); 0 = stop.
+  update_int_setting("/chargeHS", [](int value) { can_inject_charge_handshake(value != 0); });
+
+  // Route for the homescreen "Charge emulation" mode (Tesla only, see balancing/FINDINGS.md §9).
+  // 1 = BE presents a coherent parked+plugged-in context (0x21D/0x25D + charging 0x118/0x221) so
+  // the retained master enters BMS_CHARGING; 0 = back to normal drive context.
+  update_int_setting("/teslaChargeEmu",
+                     [](int value) { datalayer_extended.tesla.charge_emulation_active = (value != 0); });
+
   // Route for editing balancing max time
   update_string_setting("/BalTime", [](String value) {
     datalayer.battery.settings.balancing_max_time_ms = static_cast<uint32_t>(value.toFloat() * 60000);
@@ -1622,6 +1632,26 @@ String processor(const String& var) {
     content +=
         "<button onclick=\"var x=new XMLHttpRequest();x.open('GET','/inject054?value=0');x.send();\">"
         "Inject 0x054 OFF</button> ";
+
+    // Experimental: the proven 4-frame Tesla charge-port handshake (see balancing/FINDINGS.md §9).
+    content +=
+        "<button onclick=\"if(confirm('Inject the Tesla charge-port handshake (0x21D/0x25D/0x22A/"
+        "0x264)? This drives the retained master toward BMS_CHARGING. Set the inverter to backup "
+        "mode first and supervise.')){var "
+        "x=new XMLHttpRequest();x.open('GET','/chargeHS?value=1');x.send();}\">Charge handshake ON</button> ";
+    content +=
+        "<button onclick=\"var x=new XMLHttpRequest();x.open('GET','/chargeHS?value=0');x.send();\">"
+        "Charge handshake OFF</button> ";
+
+    // Experimental: full charge-context emulation (parked + plugged in). See balancing/FINDINGS.md §9.
+    content +=
+        "<button onclick=\"if(confirm('Enable charge-context emulation? BE will present a parked+"
+        "plugged-in car (0x21D/0x25D + charging 0x118/0x221) to drive the master into BMS_CHARGING. "
+        "Set the inverter to backup mode first and supervise.')){var "
+        "x=new XMLHttpRequest();x.open('GET','/teslaChargeEmu?value=1');x.send();}\">Charge emulation ON</button> ";
+    content +=
+        "<button onclick=\"var x=new XMLHttpRequest();x.open('GET','/teslaChargeEmu?value=0');x.send();\">"
+        "Charge emulation OFF</button> ";
     {
       uint8_t inj = can_inject_active_count();
       if (inj > 0) {

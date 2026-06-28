@@ -155,6 +155,29 @@ class TeslaBattery : public CanBattery {
                          .ID = 0x118,
                          .data = {0xAB, 0x60, 0x2A, 0x00, 0x00, 0x08, 0x00, 0x00}};
 
+  //0x118 DI_systemStatus "Charging" variant: DI_SYS_IDLE / proximity=1 / immobilizer IDLE (parked
+  //while plugged in). Data captured from a real Model 3 AC charge (balancing/TM3-CAN-LOG-CHARGE).
+  //Bytes 0/1 carry the checksum/counter and are regenerated each send like the drive frame.
+  CAN_frame TESLA_118_CHARGE = {.FD = false,
+                                .ext_ID = false,
+                                .DLC = 8,
+                                .ID = 0x118,
+                                .data = {0x5B, 0x01, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}};
+
+  //0x21D CP_evseStatus + 0x25D CP_status: the charge-port-controller "plug present, AC charger,
+  //cable secured" frames. BE does not normally send these (no charge-port hardware on a salvage
+  //pack); emitted only in charge-emulation mode. Static, no rolling counter (proven in capture).
+  CAN_frame TESLA_21D = {.FD = false,
+                         .ext_ID = false,
+                         .DLC = 8,
+                         .ID = 0x21D,
+                         .data = {0x5E, 0x40, 0x01, 0x20, 0xAC, 0x00, 0x00, 0x10}};
+  CAN_frame TESLA_25D = {.FD = false,
+                         .ext_ID = false,
+                         .DLC = 8,
+                         .ID = 0x25D,
+                         .data = {0x58, 0x0C, 0x01, 0xCF, 0x2A, 0x05, 0x56, 0x80}};
+
   //0x2A8 CMPD_state: "cycle_time" 100ms, different depending on firmware, semi-manual increment for now
   CAN_frame TESLA_2A8 = {.FD = false,
                          .ext_ID = false,
@@ -230,6 +253,20 @@ class TeslaBattery : public CanBattery {
                                   .DLC = 8,
                                   .ID = 0x221,
                                   .data = {0x01, 0x01, 0x01, 0x50, 0x00, 0x00, 0x00, 0x76}};
+
+  //0x221 VCFRONT_LVPowerState "Charging" (parkLVState OFF but HV/charge units ON). Captured from a
+  //real Model 3 AC charge (balancing/TM3-CAN-LOG-CHARGE). Counter (bit52)/checksum (bit56) are
+  //regenerated each send via generateMuxFrameCounterChecksum like the other 0x221 variants.
+  CAN_frame TESLA_221_CHARGE_Mux0 = {.FD = false,
+                                     .ext_ID = false,
+                                     .DLC = 8,
+                                     .ID = 0x221,
+                                     .data = {0x40, 0x40, 0x05, 0x55, 0x55, 0x55, 0x15, 0xBC}};
+  CAN_frame TESLA_221_CHARGE_Mux1 = {.FD = false,
+                                     .ext_ID = false,
+                                     .DLC = 8,
+                                     .ID = 0x221,
+                                     .data = {0x41, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x76}};
 
   //0x229 SCCM_rightStalk: "cycle_time" 100ms, SCCM_rightStalkChecksum/SCCM_rightStalkCounter generated via dedicated generateTESLA_229 function for now
   //CRC seemingly related to AUTOSAR ID array... "autosarDataIds": [124,182,240,47,105,163,221,28,86,144,202,9,67,125,183,241] found in Model 3 firmware
