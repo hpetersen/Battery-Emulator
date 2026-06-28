@@ -167,16 +167,16 @@ class TeslaBattery : public CanBattery {
   //0x21D CP_evseStatus + 0x25D CP_status: the charge-port-controller "plug present, AC charger,
   //cable secured" frames. BE does not normally send these (no charge-port hardware on a salvage
   //pack); emitted only in charge-emulation mode. Static, no rolling counter (proven in capture).
-  CAN_frame TESLA_21D = {.FD = false,
-                         .ext_ID = false,
-                         .DLC = 8,
-                         .ID = 0x21D,
-                         .data = {0x5E, 0x40, 0x01, 0x20, 0xAC, 0x00, 0x00, 0x10}};
-  CAN_frame TESLA_25D = {.FD = false,
-                         .ext_ID = false,
-                         .DLC = 8,
-                         .ID = 0x25D,
-                         .data = {0x58, 0x0C, 0x01, 0xCF, 0x2A, 0x05, 0x56, 0x80}};
+  CAN_frame TESLA_21D_CHARGE = {.FD = false,
+                                .ext_ID = false,
+                                .DLC = 8,
+                                .ID = 0x21D,
+                                .data = {0x5E, 0x40, 0x01, 0x20, 0xAC, 0x00, 0x00, 0x10}};
+  CAN_frame TESLA_25D_CHARGE = {.FD = false,
+                                .ext_ID = false,
+                                .DLC = 8,
+                                .ID = 0x25D,
+                                .data = {0x58, 0x0C, 0x01, 0xCF, 0x2A, 0x05, 0x56, 0x80}};
 
   //0x2A8 CMPD_state: "cycle_time" 100ms, different depending on firmware, semi-manual increment for now
   CAN_frame TESLA_2A8 = {.FD = false,

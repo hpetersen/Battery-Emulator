@@ -1887,8 +1887,8 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
     // Charge-emulation: emit the charge-port-controller frames so the master sees a plug present.
     // (BE has no charge-port hardware; these are the missing chain — see balancing/FINDINGS.md §9.)
     if (charge_emulation_active) {
-      transmit_can_frame(&TESLA_21D);
-      transmit_can_frame(&TESLA_25D);
+      transmit_can_frame(&TESLA_21D_CHARGE);
+      transmit_can_frame(&TESLA_25D_CHARGE);
     }
 
     //0x2E1 VCFRONT_status
