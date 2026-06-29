@@ -2070,6 +2070,18 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
       transmit_can_frame(&TESLA_21D_PRESENT);
       transmit_can_frame(&TESLA_23D_PRESENT);
       transmit_can_frame(&TESLA_25D_PRESENT);
+      // 0x75D CP_sensorData replay at 5 Hz (every 2nd 100 ms tick) — the frame ChargePort_MIA actually
+      // watches (FINDINGS §13.12). Loops a captured 30-frame slice.
+      static uint8_t tick75d = 0;
+      static uint8_t idx75d = 0;
+      if (++tick75d >= 2) {
+        tick75d = 0;
+        memcpy(TESLA_75D.data.u8, TESLA_75D_SEQ[idx75d], 8);
+        transmit_can_frame(&TESLA_75D);
+        if (++idx75d >= 30) {
+          idx75d = 0;
+        }
+      }
     }
 
     //0x102 VCLEFT_doorStatus, static
