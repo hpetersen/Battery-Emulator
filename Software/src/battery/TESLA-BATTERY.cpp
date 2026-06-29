@@ -2065,6 +2065,12 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
   if (currentMillis - previousMillis100 >= INTERVAL_100_MS && transmitPhase == 2) {
     previousMillis100 = currentMillis;
 
+    // Charge-port presence emulation (10 Hz) — clears BMS ChargePort_MIA -> exit limp (FINDINGS §13.7)
+    if (datalayer_extended.tesla.emulate_charge_port) {
+      transmit_can_frame(&TESLA_21D_PRESENT);
+      transmit_can_frame(&TESLA_25D_PRESENT);
+    }
+
     //0x102 VCLEFT_doorStatus, static
     transmit_can_frame(&TESLA_102);
     //0x103 VCRIGHT_doorStatus, static

@@ -176,6 +176,20 @@ class TeslaBattery : public CanBattery {
                                 .DLC = 8,
                                 .ID = 0x25D,
                                 .data = {0x58, 0x0C, 0x01, 0xD0, 0x2A, 0x05, 0x56, 0x00}};
+  // Charge-port "present but idle" heartbeats to clear the BMS ChargePort_MIA (a091/a092) -> exit limp
+  // mode (FINDINGS §13.7). Exact idle/pre-charge values from a real charge log (ColdBattCharge.csv):
+  // CP_evseAccept=0, CP_evseRequest=0, CP_chargeCablePresent=0 -> port ECU alive, no cable, no charge
+  // intent. No counter/CRC (these frames are static, verified over 2123 log samples). Sent at 10 Hz.
+  static constexpr CAN_frame TESLA_21D_PRESENT = {.FD = false,
+                                                  .ext_ID = false,
+                                                  .DLC = 8,
+                                                  .ID = 0x21D,
+                                                  .data = {0x08, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00}};
+  static constexpr CAN_frame TESLA_25D_PRESENT = {.FD = false,
+                                                  .ext_ID = false,
+                                                  .DLC = 8,
+                                                  .ID = 0x25D,
+                                                  .data = {0x24, 0x08, 0x04, 0xD0, 0x00, 0x05, 0x0B, 0x00}};
   //0x221 VCFRONT_LVPowerState "Charge" (counter/checksum via generateMuxFrameCounterChecksum).
   CAN_frame TESLA_221_CHARGE_Mux0 = {.FD = false,
                                      .ext_ID = false,

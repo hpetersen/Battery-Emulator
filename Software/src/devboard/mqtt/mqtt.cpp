@@ -659,6 +659,17 @@ void mqtt_message_received(char* topic_raw, int topic_len, char* data, int data_
     datalayer_extended.tesla.dc_charge_balance_stage = s;  // "off"/unknown/{"on":false} -> 0
   }
 
+  // Emulate the absent charge-port module to clear ChargePort_MIA -> exit Limp_Mode (FINDINGS §13.7).
+  //   {"on":true}  -> broadcast 0x21D/0x25D idle "present" heartbeats at 10 Hz
+  //   {"on":false} -> stop
+  if (strcmp(topic, generateButtonTopic("EMULATE_CP").c_str()) == 0) {
+    JsonDocument doc;
+    char* data_str = strndup(data, data_len);
+    deserializeJson(doc, data_str);
+    free(data_str);
+    datalayer_extended.tesla.emulate_charge_port = doc["on"].as<bool>();
+  }
+
   // Read-only UDS DID/routine recon at the retained BMS master (FINDINGS §13).
   //   {"unlock":true}  -> run the static-key SecurityAccess unlock sequence
   //   {"d":"0322f001"} -> transmit these raw (ISO-TP-framed) bytes once on 0x602

@@ -777,6 +777,11 @@ struct DATALAYER_INFO_TESLA {
       Every 0x612 response is published to <topic>/uds_response as hex; multiframe is auto-pulled
       (BE sends flow-control 30 00 00 on a BMS first-frame). NON-PERSISTENT, off after reboot.
       Strictly diagnostic reads here; no startRoutine (0x31 0x01) / IO-control (0x2F) is issued. */
+  /** Emulate the absent charge-port module: broadcast 0x21D/0x25D "present but idle" heartbeats at
+      10 Hz so the BMS clears ChargePort_MIA (a091/a092) and (hopefully) exits Limp_Mode (a170), which
+      is suppressing cell balancing (FINDINGS §13.6/§13.7). Idle payload = no cable / no charge request,
+      so it should NOT trigger a charge attempt. MQTT BE/command/EMULATE_CP {"on":true|false}. */
+  bool emulate_charge_port = false;
   bool uds_probe_unlock = false;
   bool uds_probe_send = false;
   bool uds_probe_active = false;
