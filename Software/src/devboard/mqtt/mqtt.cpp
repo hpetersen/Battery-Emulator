@@ -640,15 +640,23 @@ void mqtt_message_received(char* topic_raw, int topic_len, char* data, int data_
     setBatteryPause(true, false, true);
   }
 
-  // Tesla DC-charge ("Supercharger") context emulation for cell balancing (see balancing/FINDINGS.md
-  // sections 12.5/12.6).  {"on":true} = present DC-charge context so the master runs top-of-charge
-  // balancing;  {"on":false} = back to normal drive context.
+  // Tesla DC-charge ("Supercharger") context emulation for cell balancing, staged (FINDINGS §12.5/6/9).
+  //   {"stage":"park"}   -> present accessory LV-power state to settle the master to hv=UP
+  //   {"stage":"charge"} -> present the full DC-charge context (use once hv=UP is reached)
+  //   {"stage":"off"} or {"on":false} -> back to normal drive context
   if (strcmp(topic, generateButtonTopic("DC_CHARGE_BALANCE").c_str()) == 0) {
     JsonDocument doc;
     char* data_str = strndup(data, data_len);
     deserializeJson(doc, data_str);
     free(data_str);
-    datalayer_extended.tesla.dc_charge_balance_active = doc["on"] | false;
+    const char* stage = doc["stage"] | "";
+    uint8_t s = 0;
+    if (strcmp(stage, "park") == 0) {
+      s = 1;
+    } else if (strcmp(stage, "charge") == 0) {
+      s = 2;
+    }
+    datalayer_extended.tesla.dc_charge_balance_stage = s;  // "off"/unknown/{"on":false} -> 0
   }
 
   if (strcmp(topic, generateButtonTopic("SET_LIMITS").c_str()) == 0) {

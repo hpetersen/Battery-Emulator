@@ -156,7 +156,7 @@ class TeslaBattery : public CanBattery {
                          .data = {0xAB, 0x60, 0x2A, 0x00, 0x00, 0x08, 0x00, 0x00}};
 
   // ---- DC-charge ("Supercharger") context frames -----------------------------------------------
-  // Sent only when datalayer_extended.tesla.dc_charge_balance_active. Values captured from a real
+  // Sent only in dc_charge_balance_stage == CHARGE. Values captured from a real
   // Tesla DC charge (balancing/TM3-CAN-LOG-CHARGE/ColdBattCharge.csv). See FINDINGS.md 12.5/12.6.
   // Bytes 0/1 of TESLA_118_CHARGE carry the counter/checksum and are regenerated each send (used on
   // the non-digital-HVIL path; the digital-HVIL path uses the precomputed can_msg_118_CHARGE[] array).

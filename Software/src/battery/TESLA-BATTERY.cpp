@@ -1858,7 +1858,7 @@ static constexpr CAN_frame can_msg_118[] = {
 // counter/checksum cadence as can_msg_118[] above, but the DI_systemStatus payload (bytes 2-7) is the
 // DC-charge value E1 20 00 40 00 00, and byte1's status nibble is 0 (charge) not 8 (drive). Byte0 is the
 // captured checksum. Captured from a real Tesla DC charge (balancing/TM3-CAN-LOG-CHARGE/ColdBattCharge.csv).
-// Used instead of can_msg_118[] when datalayer_extended.tesla.dc_charge_balance_active. See FINDINGS §12.6.
+// Used instead of can_msg_118[] in dc_charge_balance_stage == CHARGE. See FINDINGS §12.6.
 static constexpr CAN_frame can_msg_118_CHARGE[] = {
     {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x5A, 0x00, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
     {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x5B, 0x01, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
@@ -1885,9 +1885,11 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
     transmitPhase = 0;
   }
 
-  // DC-charge ("Supercharger") context emulation — present a charge context so the retained master
-  // runs top-of-charge balancing. Read once per pass. See balancing/FINDINGS.md sections 12.5/12.6.
-  const bool dc_charge = datalayer_extended.tesla.dc_charge_balance_active;
+  // DC-charge ("Supercharger") context emulation, staged (0=off,1=park,2=charge). Read once per pass.
+  // Stage 1 (park) presents an accessory LV-power state to settle the master from UP_FOR_DRIVE->UP;
+  // stage 2 (charge) presents the full DC-charge context. See balancing/FINDINGS.md sections 12.5/12.6/12.9.
+  const uint8_t dc_stage = datalayer_extended.tesla.dc_charge_balance_stage;
+  const bool dc_charge = (dc_stage == 2);  // full charge context (0x118/21D/25D charge) only in stage 2
 
   //Send 10ms messages
   if (currentMillis - previousMillis10 >= INTERVAL_10_MS && transmitPhase == 0) {
@@ -1960,6 +1962,16 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
       } else {
         generateMuxFrameCounterChecksum(TESLA_221_CHARGE_Mux1, frameCounter_TESLA_221, 52, 4, 56, 8);
         transmit_can_frame(&TESLA_221_CHARGE_Mux1);
+      }
+    } else if (dc_stage == 1) {
+      // PARK stage: present the accessory (non-drive) LV-power state so the master stops supporting
+      // drive and settles hv UP_FOR_DRIVE -> UP, the state a real charge is entered from (FINDINGS §12.9).
+      if (alternateMux) {
+        generateMuxFrameCounterChecksum(TESLA_221_ACCESSORY_Mux0, frameCounter_TESLA_221, 52, 4, 56, 8);
+        transmit_can_frame(&TESLA_221_ACCESSORY_Mux0);
+      } else {
+        generateMuxFrameCounterChecksum(TESLA_221_ACCESSORY_Mux1, frameCounter_TESLA_221, 52, 4, 56, 8);
+        transmit_can_frame(&TESLA_221_ACCESSORY_Mux1);
       }
     } else if (vehicleState == CAR_DRIVE) {
       if (alternateMux) {
