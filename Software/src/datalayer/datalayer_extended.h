@@ -751,6 +751,14 @@ struct DATALAYER_INFO_TESLA {
   uint8_t PCS_partNumber[13] = {0};        //stores raw HEX values for ASCII chars
   uint8_t HVP_partNumber[13] = {0};        //stores raw HEX values for ASCII chars
   char* battery_manufactureDate;
+
+  /** DC-charge ("Supercharger") context emulation. When true, BE presents a DC-charge context on
+      vehicle CAN (DC-charge 0x118 DI_systemStatus + 0x21D/0x25D charge-port chain + 0x221 charge LV
+      power state) so the retained Tesla master enters a charge session and runs its native
+      top-of-charge cell balancing. Frame values are captured from a real Tesla DC charge
+      (balancing/TM3-CAN-LOG-CHARGE). Toggle via MQTT BE/command/DC_CHARGE_BALANCE {"on":true|false}.
+      See balancing/FINDINGS.md sections 12.5/12.6. Non-persistent (off after reboot). */
+  bool dc_charge_balance_active = false;
 };
 
 struct DATALAYER_INFO_NISSAN_LEAF {

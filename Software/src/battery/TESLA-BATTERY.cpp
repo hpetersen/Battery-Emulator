@@ -1854,6 +1854,29 @@ static constexpr CAN_frame can_msg_118[] = {
     {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x6F, 0x8E, 0x30, 0x10, 0x00, 0x08, 0x00, 0x80}},
     {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x70, 0x8F, 0x30, 0x10, 0x00, 0x08, 0x00, 0x80}}};
 
+// DC-charge ("Supercharger") variant of the digital-HVIL 0x118 DI_systemStatus stream. Same 16-step
+// counter/checksum cadence as can_msg_118[] above, but the DI_systemStatus payload (bytes 2-7) is the
+// DC-charge value E1 20 00 40 00 00, and byte1's status nibble is 0 (charge) not 8 (drive). Byte0 is the
+// captured checksum. Captured from a real Tesla DC charge (balancing/TM3-CAN-LOG-CHARGE/ColdBattCharge.csv).
+// Used instead of can_msg_118[] when datalayer_extended.tesla.dc_charge_balance_active. See FINDINGS §12.6.
+static constexpr CAN_frame can_msg_118_CHARGE[] = {
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x5A, 0x00, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x5B, 0x01, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x5C, 0x02, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x5D, 0x03, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x5E, 0x04, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x5F, 0x05, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x60, 0x06, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x61, 0x07, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x62, 0x08, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x63, 0x09, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x64, 0x0A, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x65, 0x0B, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x66, 0x0C, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x67, 0x0D, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x68, 0x0E, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}},
+    {.FD = false, .ext_ID = false, .DLC = 8, .ID = 0x118, .data = {0x69, 0x0F, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}}};
+
 void TeslaBattery::transmit_can(unsigned long currentMillis) {
   // Ensure we only send one message branch at a time, to reduce worst-case
   // runtime.
@@ -1861,6 +1884,10 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
   if (++transmitPhase >= 5) {
     transmitPhase = 0;
   }
+
+  // DC-charge ("Supercharger") context emulation — present a charge context so the retained master
+  // runs top-of-charge balancing. Read once per pass. See balancing/FINDINGS.md sections 12.5/12.6.
+  const bool dc_charge = datalayer_extended.tesla.dc_charge_balance_active;
 
   //Send 10ms messages
   if (currentMillis - previousMillis10 >= INTERVAL_10_MS && transmitPhase == 0) {
@@ -1871,14 +1898,24 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
           (datalayer.system.status.system_status != FAULT)) {
         transmit_can_frame(&can_msg_1CF[index_1CF]);
         index_1CF = (index_1CF + 1) % 8;
-        transmit_can_frame(&can_msg_118[index_118]);
+        // 0x118 DI_systemStatus — swap to the DC-charge variant when emulating a charge session, so it
+        // no longer contradicts the charge context (the digital-HVIL 0x118 not being swapped was the
+        // root cause of the earlier charge-emulation fault — see FINDINGS.md §12.6).
+        transmit_can_frame(dc_charge ? &can_msg_118_CHARGE[index_118] : &can_msg_118[index_118]);
         index_118 = (index_118 + 1) % 16;
       }
     } else {  //Normal handling of 118 message (Non digital HVIL version)
       //0x118 DI_systemStatus
-      transmit_can_frame(&TESLA_118);
+      transmit_can_frame(dc_charge ? &TESLA_118_CHARGE : &TESLA_118);
       index_1CF = 0;  //Stop broadcasting Digital HVIL 1CF and 118 to keep contactors open
       index_118 = 0;
+    }
+
+    // Charge-port-controller chain: tell the master a DC charger is plugged in (0x21D CP_evseStatus,
+    // 0x25D CP_status). BE has no charge-port hardware, so these are absent unless we emulate them.
+    if (dc_charge) {
+      transmit_can_frame(&TESLA_21D_CHARGE);
+      transmit_can_frame(&TESLA_25D_CHARGE);
     }
 
     //0x2E1 VCFRONT_status
@@ -1905,8 +1942,8 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
         break;
     }
     muxNumber_TESLA_2E1 = (muxNumber_TESLA_2E1 + 1) % 6;  //Cycle betweeen 0-1-2-3-4-5-0...
-    //Generate next frames
-    generateFrameCounterChecksum(TESLA_118, 8, 4, 0, 8);
+    //Generate next frames (regenerate whichever non-digital-HVIL 0x118 variant we just sent)
+    generateFrameCounterChecksum(dc_charge ? TESLA_118_CHARGE : TESLA_118, 8, 4, 0, 8);
   }
 
   //Send 50ms messages
@@ -1914,7 +1951,17 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
     previousMillis50 = currentMillis;
 
     //0x221 VCFRONT_LVPowerState
-    if (vehicleState == CAR_DRIVE) {
+    if (dc_charge) {
+      // Present the charge LV-power state instead of drive, so 0x221 stays coherent with the DC-charge
+      // context asserted on 0x118/0x21D/0x25D (see FINDINGS.md §12.6).
+      if (alternateMux) {
+        generateMuxFrameCounterChecksum(TESLA_221_CHARGE_Mux0, frameCounter_TESLA_221, 52, 4, 56, 8);
+        transmit_can_frame(&TESLA_221_CHARGE_Mux0);
+      } else {
+        generateMuxFrameCounterChecksum(TESLA_221_CHARGE_Mux1, frameCounter_TESLA_221, 52, 4, 56, 8);
+        transmit_can_frame(&TESLA_221_CHARGE_Mux1);
+      }
+    } else if (vehicleState == CAR_DRIVE) {
       if (alternateMux) {
         generateMuxFrameCounterChecksum(TESLA_221_DRIVE_Mux0, frameCounter_TESLA_221, 52, 4, 56, 8);
         transmit_can_frame(&TESLA_221_DRIVE_Mux0);

@@ -640,6 +640,17 @@ void mqtt_message_received(char* topic_raw, int topic_len, char* data, int data_
     setBatteryPause(true, false, true);
   }
 
+  // Tesla DC-charge ("Supercharger") context emulation for cell balancing (see balancing/FINDINGS.md
+  // sections 12.5/12.6).  {"on":true} = present DC-charge context so the master runs top-of-charge
+  // balancing;  {"on":false} = back to normal drive context.
+  if (strcmp(topic, generateButtonTopic("DC_CHARGE_BALANCE").c_str()) == 0) {
+    JsonDocument doc;
+    char* data_str = strndup(data, data_len);
+    deserializeJson(doc, data_str);
+    free(data_str);
+    datalayer_extended.tesla.dc_charge_balance_active = doc["on"] | false;
+  }
+
   if (strcmp(topic, generateButtonTopic("SET_LIMITS").c_str()) == 0) {
     JsonDocument doc;
     char* data_str = strndup(data, data_len);

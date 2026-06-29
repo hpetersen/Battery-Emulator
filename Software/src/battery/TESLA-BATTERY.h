@@ -155,6 +155,39 @@ class TeslaBattery : public CanBattery {
                          .ID = 0x118,
                          .data = {0xAB, 0x60, 0x2A, 0x00, 0x00, 0x08, 0x00, 0x00}};
 
+  // ---- DC-charge ("Supercharger") context frames -----------------------------------------------
+  // Sent only when datalayer_extended.tesla.dc_charge_balance_active. Values captured from a real
+  // Tesla DC charge (balancing/TM3-CAN-LOG-CHARGE/ColdBattCharge.csv). See FINDINGS.md 12.5/12.6.
+  // Bytes 0/1 of TESLA_118_CHARGE carry the counter/checksum and are regenerated each send (used on
+  // the non-digital-HVIL path; the digital-HVIL path uses the precomputed can_msg_118_CHARGE[] array).
+  CAN_frame TESLA_118_CHARGE = {.FD = false,
+                                .ext_ID = false,
+                                .DLC = 8,
+                                .ID = 0x118,
+                                .data = {0x00, 0x00, 0xE1, 0x20, 0x00, 0x40, 0x00, 0x00}};
+  //0x21D CP_evseStatus + 0x25D CP_status: charge-port "plug present / DC charger / cable secured".
+  CAN_frame TESLA_21D_CHARGE = {.FD = false,
+                                .ext_ID = false,
+                                .DLC = 8,
+                                .ID = 0x21D,
+                                .data = {0x5E, 0x40, 0x01, 0x20, 0xAC, 0x00, 0x00, 0x10}};
+  CAN_frame TESLA_25D_CHARGE = {.FD = false,
+                                .ext_ID = false,
+                                .DLC = 8,
+                                .ID = 0x25D,
+                                .data = {0x58, 0x0C, 0x01, 0xD0, 0x2A, 0x05, 0x56, 0x00}};
+  //0x221 VCFRONT_LVPowerState "Charge" (counter/checksum via generateMuxFrameCounterChecksum).
+  CAN_frame TESLA_221_CHARGE_Mux0 = {.FD = false,
+                                     .ext_ID = false,
+                                     .DLC = 8,
+                                     .ID = 0x221,
+                                     .data = {0x40, 0x40, 0x05, 0x55, 0x55, 0x55, 0x15, 0xBC}};
+  CAN_frame TESLA_221_CHARGE_Mux1 = {.FD = false,
+                                     .ext_ID = false,
+                                     .DLC = 8,
+                                     .ID = 0x221,
+                                     .data = {0x41, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x76}};
+
   //0x2A8 CMPD_state: "cycle_time" 100ms, different depending on firmware, semi-manual increment for now
   CAN_frame TESLA_2A8 = {.FD = false,
                          .ext_ID = false,
