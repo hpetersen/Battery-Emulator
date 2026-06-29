@@ -520,6 +520,7 @@ class TeslaBattery : public CanBattery {
   uint8_t stateMachineBMSReset = 0xFF;
   uint8_t stateMachineSOCReset = 0xFF;
   uint8_t stateMachineBMSQuery = 0xFF;
+  uint8_t stateMachineUDSProbeUnlock = 0xFF;  // read-only UDS recon unlock sequence (FINDINGS §13)
   uint16_t battery_cell_max_v = 3300;
   uint16_t battery_cell_min_v = 3300;
   bool cellvoltagesRead = false;

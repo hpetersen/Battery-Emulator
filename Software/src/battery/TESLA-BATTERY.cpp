@@ -4,6 +4,7 @@
 #include "../communication/can/comm_can.h"
 #include "../datalayer/datalayer.h"
 #include "../datalayer/datalayer_extended.h"  //For Advanced Battery Insights webpage
+#include "../devboard/mqtt/mqtt.h"  //For UDS recon response relay (FINDINGS §13)
 #include "../devboard/utils/events.h"
 #include "../devboard/utils/logging.h"
 
@@ -616,6 +617,12 @@ void TeslaBattery::
       set_event(EVENT_BATTERY_SOC_RESET_FAIL, 0);
       clear_event(EVENT_BATTERY_SOC_RESET_FAIL);
     }
+  }
+
+  if (datalayer_extended.tesla.uds_probe_unlock) {
+    stateMachineUDSProbeUnlock = 0;  // start the read-only UDS recon unlock sequence (FINDINGS §13)
+    datalayer_extended.tesla.uds_probe_unlock = false;
+    logging.println("INFO: UDS probe unlock requested");
   }
 
   //Update 0x333 UI_chargeTerminationPct (bit 16, width 10) value to SOC max value - expose via UI?
@@ -1753,6 +1760,12 @@ void TeslaBattery::handle_incoming_can_frame(CAN_frame rx_frame) {
       break;
     case 0x612:  // CAN UDS responses for BMS
       datalayer_battery->status.CAN_battery_still_alive = CAN_STILL_ALIVE;
+      if (datalayer_extended.tesla.uds_probe_active) {  // read-only UDS recon relay (FINDINGS §13)
+        mqtt_publish_uds_response(rx_frame.data.u8, 8);
+        if ((rx_frame.data.u8[0] & 0xF0) == 0x10) {  // BMS first frame -> ask for the rest (FC)
+          datalayer_extended.tesla.uds_probe_send_fc = true;
+        }
+      }
       //BMS Query
       if (stateMachineBMSQuery != 0xFF && stateMachineBMSReset == 0xFF && stateMachineSOCReset == 0xFF) {
         if (memcmp(rx_frame.data.u8, "\x02\x50\x03\xAA\xAA\xAA\xAA\xAA", 8) == 0) {
@@ -2091,6 +2104,56 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
     generateTESLA_229(TESLA_229);
     generateFrameCounterChecksum(TESLA_2A8, 52, 4, 56, 8);
     generateFrameCounterChecksum(TESLA_2E8, 52, 4, 56, 8);
+
+    // Read-only UDS recon (FINDINGS §13): static-key SecurityAccess unlock, then arbitrary
+    // single-frame requests driven from MQTT. Steps once per 100 ms tick (ISO-TP friendly).
+    if (stateMachineUDSProbeUnlock != 0xFF) {
+      switch (stateMachineUDSProbeUnlock) {
+        case 0:  // enter extended diagnostic session
+          TESLA_602.data = {0x02, 0x10, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00};
+          transmit_can_frame(&TESLA_602);
+          stateMachineUDSProbeUnlock = 1;
+          break;
+        case 1:  // request security seed (level 05)
+          TESLA_602.data = {0x02, 0x27, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00};
+          transmit_can_frame(&TESLA_602);
+          stateMachineUDSProbeUnlock = 2;
+          break;
+        case 2:  // flow-control so the BMS streams the multiframe seed response
+          TESLA_602.data = {0x30, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00};
+          transmit_can_frame(&TESLA_602);
+          stateMachineUDSProbeUnlock = 3;
+          break;
+        case 3:  // send key (static 16-byte key, multiframe first frame)
+          TESLA_602.data = {0x10, 0x12, 0x27, 0x06, 0x35, 0x34, 0x37, 0x36};
+          transmit_can_frame(&TESLA_602);
+          stateMachineUDSProbeUnlock = 4;
+          break;
+        case 4:
+          TESLA_602.data = {0x21, 0x31, 0x30, 0x33, 0x32, 0x3D, 0x3C, 0x3F};
+          transmit_can_frame(&TESLA_602);
+          stateMachineUDSProbeUnlock = 5;
+          break;
+        case 5:
+          TESLA_602.data = {0x22, 0x3E, 0x39, 0x38, 0x3B, 0x3A, 0x00, 0x00};
+          transmit_can_frame(&TESLA_602);  // BMS should reply 02 67 06 (unlocked)
+          stateMachineUDSProbeUnlock = 0xFF;
+          break;
+        default:
+          stateMachineUDSProbeUnlock = 0xFF;
+          break;
+      }
+    }
+    if (datalayer_extended.tesla.uds_probe_send_fc) {  // pull a BMS multiframe response
+      datalayer_extended.tesla.uds_probe_send_fc = false;
+      TESLA_602.data = {0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+      transmit_can_frame(&TESLA_602);
+    }
+    if (datalayer_extended.tesla.uds_probe_send) {  // single arbitrary request
+      datalayer_extended.tesla.uds_probe_send = false;
+      memcpy(TESLA_602.data.u8, datalayer_extended.tesla.uds_probe_data, 8);
+      transmit_can_frame(&TESLA_602);
+    }
 
     if (stateMachineClearIsolationFault != 0xFF) {
       //This implementation should be rewritten to actually reply to the UDS responses sent by the BMS

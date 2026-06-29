@@ -62,4 +62,8 @@ bool init_mqtt(void);
 void mqtt_client_loop(void);
 bool mqtt_publish(const char* topic, const char* mqtt_msg, bool retain);
 
+// Publish a raw UDS (0x612) response frame to <topic>/uds_response as hex. Used by the Tesla
+// battery 0x612 handler during read-only UDS recon (FINDINGS §13).
+void mqtt_publish_uds_response(const uint8_t* data, uint8_t len);
+
 #endif

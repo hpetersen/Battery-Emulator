@@ -659,6 +659,39 @@ void mqtt_message_received(char* topic_raw, int topic_len, char* data, int data_
     datalayer_extended.tesla.dc_charge_balance_stage = s;  // "off"/unknown/{"on":false} -> 0
   }
 
+  // Read-only UDS DID/routine recon at the retained BMS master (FINDINGS §13).
+  //   {"unlock":true}  -> run the static-key SecurityAccess unlock sequence
+  //   {"d":"0322f001"} -> transmit these raw (ISO-TP-framed) bytes once on 0x602
+  //   {"active":false} -> stop relaying 0x612 responses to <topic>/uds_response
+  if (strcmp(topic, generateButtonTopic("UDS_PROBE").c_str()) == 0) {
+    JsonDocument doc;
+    char* data_str = strndup(data, data_len);
+    deserializeJson(doc, data_str);
+    free(data_str);
+    if (doc["unlock"].as<bool>()) {
+      datalayer_extended.tesla.uds_probe_active = true;
+      datalayer_extended.tesla.uds_probe_unlock = true;
+    }
+    if (doc["active"].is<bool>() && !doc["active"].as<bool>()) {
+      datalayer_extended.tesla.uds_probe_active = false;
+    }
+    const char* d = doc["d"] | "";
+    size_t n = strlen(d);
+    if (n >= 2 && n <= 16 && (n % 2) == 0) {
+      uint8_t dlc = n / 2;
+      for (uint8_t i = 0; i < dlc; i++) {
+        char b[3] = {d[i * 2], d[i * 2 + 1], '\0'};
+        datalayer_extended.tesla.uds_probe_data[i] = (uint8_t)strtol(b, nullptr, 16);
+      }
+      for (uint8_t i = dlc; i < 8; i++) {
+        datalayer_extended.tesla.uds_probe_data[i] = 0;
+      }
+      datalayer_extended.tesla.uds_probe_dlc = dlc;
+      datalayer_extended.tesla.uds_probe_active = true;
+      datalayer_extended.tesla.uds_probe_send = true;
+    }
+  }
+
   if (strcmp(topic, generateButtonTopic("SET_LIMITS").c_str()) == 0) {
     JsonDocument doc;
     char* data_str = strndup(data, data_len);
@@ -833,4 +866,19 @@ void mqtt_client_loop(void) {
 bool mqtt_publish(const char* topic, const char* mqtt_msg, bool retain) {
   int msg_id = esp_mqtt_client_publish(client, topic, mqtt_msg, strlen(mqtt_msg), MQTT_QOS, retain);
   return msg_id > -1;
+}
+
+void mqtt_publish_uds_response(const uint8_t* data, uint8_t len) {
+  if (client == nullptr || len == 0 || len > 8) {
+    return;
+  }
+  char hex[17];
+  static const char* nib = "0123456789abcdef";
+  for (uint8_t i = 0; i < len; i++) {
+    hex[i * 2] = nib[data[i] >> 4];
+    hex[i * 2 + 1] = nib[data[i] & 0x0F];
+  }
+  hex[len * 2] = '\0';
+  String topic = topic_name + "/uds_response";
+  esp_mqtt_client_publish(client, topic.c_str(), hex, len * 2, MQTT_QOS, false);
 }

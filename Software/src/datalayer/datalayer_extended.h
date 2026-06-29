@@ -764,6 +764,25 @@ struct DATALAYER_INFO_TESLA {
       Frame values captured from a real Tesla DC charge (balancing/TM3-CAN-LOG-CHARGE). Toggle via MQTT
       BE/command/DC_CHARGE_BALANCE {"stage":"off"|"park"|"charge"}. Non-persistent (off after reboot). */
   uint8_t dc_charge_balance_stage = 0;
+  /** UDS probe (read-only DID/routine recon over 0x602/0x612, FINDINGS §13).
+      Lets us drive arbitrary single-frame UDS requests at the retained BMS master and relay every
+      0x612 response back to MQTT, to hunt for a balancing-state DID / IO-control without the ODX.
+      Driven via MQTT BE/command/UDS_PROBE:
+        {"unlock":true}   -> run the static-key SecurityAccess unlock sequence (extended session +
+                             27 05 seed / 27 06 key), enabling security-gated reads.
+        {"d":"0322f001"}  -> transmit these raw bytes once on 0x602 (caller pre-frames ISO-TP:
+                             single frame = [len][service][data...]). Covers 0x22 ReadDataByID and
+                             0x31 0x03 requestRoutineResults (both fit one frame).
+        {"active":false}  -> stop relaying 0x612 to MQTT.
+      Every 0x612 response is published to <topic>/uds_response as hex; multiframe is auto-pulled
+      (BE sends flow-control 30 00 00 on a BMS first-frame). NON-PERSISTENT, off after reboot.
+      Strictly diagnostic reads here; no startRoutine (0x31 0x01) / IO-control (0x2F) is issued. */
+  bool uds_probe_unlock = false;
+  bool uds_probe_send = false;
+  bool uds_probe_active = false;
+  bool uds_probe_send_fc = false;
+  uint8_t uds_probe_dlc = 0;
+  uint8_t uds_probe_data[8] = {0};
 };
 
 struct DATALAYER_INFO_NISSAN_LEAF {
