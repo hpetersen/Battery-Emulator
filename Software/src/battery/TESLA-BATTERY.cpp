@@ -2068,6 +2068,7 @@ void TeslaBattery::transmit_can(unsigned long currentMillis) {
     // Charge-port presence emulation (10 Hz) — clears BMS ChargePort_MIA -> exit limp (FINDINGS §13.7)
     if (datalayer_extended.tesla.emulate_charge_port) {
       transmit_can_frame(&TESLA_21D_PRESENT);
+      transmit_can_frame(&TESLA_23D_PRESENT);
       transmit_can_frame(&TESLA_25D_PRESENT);
     }
 

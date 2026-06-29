@@ -190,6 +190,13 @@ class TeslaBattery : public CanBattery {
                                                   .DLC = 8,
                                                   .ID = 0x25D,
                                                   .data = {0x24, 0x08, 0x04, 0xD0, 0x00, 0x05, 0x0B, 0x00}};
+  // 0x23D CP_chargeStatus — the CP ECU sends this at 10 Hz alongside 0x21D/0x25D (DLC 1, value 0x00 idle).
+  // Likely part of the heartbeat the BMS ChargePort_MIA watches; was missing from the first attempt.
+  static constexpr CAN_frame TESLA_23D_PRESENT = {.FD = false,
+                                                  .ext_ID = false,
+                                                  .DLC = 1,
+                                                  .ID = 0x23D,
+                                                  .data = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}};
   //0x221 VCFRONT_LVPowerState "Charge" (counter/checksum via generateMuxFrameCounterChecksum).
   CAN_frame TESLA_221_CHARGE_Mux0 = {.FD = false,
                                      .ext_ID = false,
